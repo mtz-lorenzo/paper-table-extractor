@@ -1,61 +1,61 @@
-"""Pruebas de punta a punta con PDFs sintéticos (2 columnas de texto + tablas)."""
+"""End-to-end tests with synthetic PDFs (2 columns of text + tables)."""
 import pytest
 
 pytest.importorskip("pdfplumber")
 pytest.importorskip("reportlab")
 
-from pdf_ejemplo import crear_pdf, crear_pdf_solo_prosa  # noqa: E402
+from sample_pdf import create_pdf, create_prose_only_pdf  # noqa: E402
 
-from extractor_tablas.detector import extraer_tablas  # noqa: E402
+from table_extractor.detector import extract_tables  # noqa: E402
 
 
 @pytest.fixture
-def tablas(tmp_path):
-    ruta = tmp_path / "paper.pdf"
-    crear_pdf(str(ruta))
-    return extraer_tablas(str(ruta))
+def tables(tmp_path):
+    path = tmp_path / "paper.pdf"
+    create_pdf(str(path))
+    return extract_tables(str(path))
 
 
-def test_encuentra_exactamente_las_tres_tablas(tablas):
-    # Página 3 es solo texto en dos columnas: no debe generar falsos positivos
-    assert [t["pagina"] for t in tablas] == [1, 2, 4]
+def test_finds_exactly_the_three_tables(tables):
+    # Page 3 is plain two-column text: it must not produce false positives
+    assert [t["page"] for t in tables] == [1, 2, 4]
 
 
-def test_ninguna_pagina_de_prosa_da_falsos_positivos_ni_con_busqueda_ampliada(tmp_path):
-    ruta = tmp_path / "prosa.pdf"
-    crear_pdf_solo_prosa(str(ruta))
-    assert extraer_tablas(str(ruta), permisivo=False) == []
-    assert extraer_tablas(str(ruta), permisivo=True) == []
+def test_prose_only_pdf_gives_no_tables_even_with_extended_search(tmp_path):
+    path = tmp_path / "prose.pdf"
+    create_prose_only_pdf(str(path))
+    assert extract_tables(str(path), extended_search=False) == []
+    assert extract_tables(str(path), extended_search=True) == []
 
 
-def test_busqueda_ampliada_no_agrega_basura(tmp_path):
-    ruta = tmp_path / "paper.pdf"
-    crear_pdf(str(ruta))
-    assert [t["pagina"] for t in extraer_tablas(str(ruta), permisivo=True)] == [1, 2, 4]
+def test_extended_search_adds_no_junk(tmp_path):
+    path = tmp_path / "paper.pdf"
+    create_pdf(str(path))
+    assert [t["page"] for t in extract_tables(str(path), extended_search=True)] == [1, 2, 4]
 
 
-def test_tabla_con_grilla_y_encabezado_combinado(tablas):
-    t = tablas[0]
-    assert t["origen"] == "grilla"
-    assert t["titulo"].startswith("Table 1.")
+def test_grid_table_with_merged_header(tables):
+    t = tables[0]
+    assert t["source"] == "grid"
+    assert t["caption"].startswith("Table 1.")
     cols = list(t["df"].columns)
     assert cols[0] == "Coded units and themes"
     assert cols[1] == "Documented in experience, n (%) – All experiences (n = 3778)"
     assert cols[2].startswith("Documented in experience, n (%) – Experiences with no reported")
-    assert len(t["df"]) == 5  # Somatic + 4 filas de datos
+    assert len(t["df"]) == 5  # Somatic + 4 data rows
     assert t["df"].iloc[1].tolist() == ["Somaesthesias", "1415 (37.5)", "1212 (37.4)"]
 
 
-def test_tabla_booktabs_no_corta_palabras(tablas):
-    t = tablas[1]
-    assert t["origen"] == "titulo"
+def test_booktabs_table_does_not_cut_words(tables):
+    t = tables[1]
+    assert t["source"] == "caption"
     assert list(t["df"].columns) == ["Compound", "Receptor", "Ki (nM)"]
     assert t["df"].iloc[0].tolist() == ["DMT", "5-HT2A", "127 ± 12"]
     assert len(t["df"]) == 4
 
 
-def test_booktabs_con_encabezado_combinado_sin_grilla(tablas):
-    t = tablas[2]
+def test_booktabs_with_merged_header_and_no_grid(tables):
+    t = tables[2]
     assert list(t["df"].columns) == [
         "Compound",
         "Binding affinity (nM) – Ki",

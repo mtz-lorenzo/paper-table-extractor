@@ -1,4 +1,4 @@
-"""Interfaz web (Gradio) del extractor de tablas de papers científicos."""
+"""Web interface (Gradio) for the scientific-paper table extractor."""
 import json
 import logging
 import os
@@ -6,51 +6,51 @@ import os
 import gradio as gr
 import pandas as pd
 
-from extractor_tablas.base_datos import guardar_en_db
-from extractor_tablas.config import DB_PATH
-from extractor_tablas.detector import extraer_tablas
-from extractor_tablas.exportacion import exportar_archivos
+from table_extractor.config import DB_PATH
+from table_extractor.database import save_to_db
+from table_extractor.detector import extract_tables
+from table_extractor.export import export_files
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
 
 # ---------------------------------------------------------------------------
-# Vista de la tabla actual
+# Current-table view
 # ---------------------------------------------------------------------------
-def mostrar(tablas, idx):
-    """Devuelve todo lo necesario para refrescar la vista de la tabla actual."""
-    total = len(tablas)
-    tabla = tablas[idx]
-    ruta_csv, ruta_xlsx = exportar_archivos(tabla)
+def show_table(tables, idx):
+    """Return everything needed to refresh the view of the current table."""
+    total = len(tables)
+    table = tables[idx]
+    csv_path, xlsx_path = export_files(table)
 
-    titulo = tabla.get("titulo", "")
-    if len(titulo) > 160:
-        titulo = titulo[:157] + "..."
+    caption = table.get("caption", "")
+    if len(caption) > 160:
+        caption = caption[:157] + "..."
     info = (
-        f"### Tabla {idx + 1} de {total}  \n"
-        f"Página {tabla['pagina']} · {len(tabla['df'])} filas × "
-        f"{len(tabla['df'].columns)} columnas"
+        f"### Table {idx + 1} of {total}  \n"
+        f"Page {table['page']} · {len(table['df'])} rows × "
+        f"{len(table['df'].columns)} columns"
     )
-    if titulo:
-        info += f"  \n*{titulo}*"
+    if caption:
+        info += f"  \n*{caption}*"
 
-    registros = tabla["df"].to_dict(orient="records")
+    records = table["df"].to_dict(orient="records")
     return (
         idx,
         info,
-        tabla["df"],
-        json.dumps(registros, indent=2, ensure_ascii=False),
-        gr.update(value=ruta_csv, interactive=True),
-        gr.update(value=ruta_xlsx, interactive=ruta_xlsx is not None),
+        table["df"],
+        json.dumps(records, indent=2, ensure_ascii=False),
+        gr.update(value=csv_path, interactive=True),
+        gr.update(value=xlsx_path, interactive=xlsx_path is not None),
         gr.update(interactive=idx > 0),
         gr.update(interactive=idx < total - 1),
     )
 
 
-def vista_vacia(mensaje):
+def empty_view(message):
     return (
         0,
-        mensaje,
+        message,
         pd.DataFrame(),
         "",
         gr.update(value=None, interactive=False),
@@ -60,127 +60,127 @@ def vista_vacia(mensaje):
     )
 
 
-def procesar(archivo_pdf, permisivo):
-    if archivo_pdf is None:
-        return ("Por favor, sube un archivo PDF.", []) + vista_vacia("")
-    ruta = getattr(archivo_pdf, "name", archivo_pdf)
-    tablas = extraer_tablas(ruta, permisivo)
-    if not tablas:
+def process(pdf_file, extended_search):
+    if pdf_file is None:
+        return ("Please upload a PDF file.", []) + empty_view("")
+    path = getattr(pdf_file, "name", pdf_file)
+    tables = extract_tables(path, extended_search)
+    if not tables:
         return (
-            "No se detectaron tablas en este PDF. Si sabés que tiene, probá activar "
-            "la búsqueda ampliada.",
+            "No tables were detected in this PDF. If you know it has some, "
+            "try enabling the extended search.",
             [],
-        ) + vista_vacia("")
-    estado = f"¡Listo! Se extrajeron {len(tablas)} tablas en total."
-    return (estado, tablas) + mostrar(tablas, 0)
+        ) + empty_view("")
+    status = f"Done! {len(tables)} tables extracted."
+    return (status, tables) + show_table(tables, 0)
 
 
-def mover(tablas, idx, delta):
-    if not tablas:
-        return vista_vacia("")
-    nuevo = min(max(idx + delta, 0), len(tablas) - 1)
-    return mostrar(tablas, nuevo)
+def move(tables, idx, delta):
+    if not tables:
+        return empty_view("")
+    new_idx = min(max(idx + delta, 0), len(tables) - 1)
+    return show_table(tables, new_idx)
 
 
 # ---------------------------------------------------------------------------
-# Base de datos
+# Database
 # ---------------------------------------------------------------------------
-def _guardar(tablas, indices, ruta_db):
-    ruta_db = (ruta_db or DB_PATH).strip() or DB_PATH
+def _save(tables, indices, db_path):
+    db_path = (db_path or DB_PATH).strip() or DB_PATH
     try:
-        n = guardar_en_db(tablas, indices, ruta_db)
+        n = save_to_db(tables, indices, db_path)
     except Exception as e:
-        return f"No se pudo guardar: {e}"
-    return f"✅ {n} tabla(s) guardada(s) en {os.path.abspath(ruta_db)}"
+        return f"Could not save: {e}"
+    return f"✅ {n} table(s) saved to {os.path.abspath(db_path)}"
 
 
-def guardar_actual(tablas, idx, ruta_db):
-    if not tablas:
-        return "Primero extraé las tablas de un PDF."
-    return _guardar(tablas, [idx], ruta_db)
+def save_current(tables, idx, db_path):
+    if not tables:
+        return "Extract the tables from a PDF first."
+    return _save(tables, [idx], db_path)
 
 
-def guardar_todas(tablas, ruta_db):
-    if not tablas:
-        return "Primero extraé las tablas de un PDF."
-    return _guardar(tablas, list(range(len(tablas))), ruta_db)
+def save_all(tables, db_path):
+    if not tables:
+        return "Extract the tables from a PDF first."
+    return _save(tables, list(range(len(tables))), db_path)
 
 
 # ---------------------------------------------------------------------------
-# Interfaz
+# Interface
 # ---------------------------------------------------------------------------
-with gr.Blocks(title="Paper Table Extractor", theme=gr.themes.Soft()) as interfaz:
-    gr.Markdown("# 🧬 Extractor de Tablas de Papers Científicos")
+with gr.Blocks(title="Paper Table Extractor", theme=gr.themes.Soft()) as demo:
+    gr.Markdown("# 🧬 Scientific Paper Table Extractor")
     gr.Markdown(
-        "Sube el PDF de un paper, navega entre las tablas detectadas con las "
-        "flechas y descarga la que quieras de forma individual."
+        "Upload a paper as a PDF, browse the detected tables with the arrows and "
+        "download any of them individually."
     )
 
-    tablas_state = gr.State([])
+    tables_state = gr.State([])
     idx_state = gr.State(0)
 
     with gr.Row():
-        input_pdf = gr.File(label="Sube tu Paper en PDF", file_types=[".pdf"])
+        pdf_input = gr.File(label="Upload your paper (PDF)", file_types=[".pdf"])
         with gr.Column():
-            chk_permisivo = gr.Checkbox(
-                label="Búsqueda ampliada (incluye tablas sin título 'Table N' ni líneas; "
-                "puede traer falsos positivos)",
+            extended_chk = gr.Checkbox(
+                label="Extended search (also looks for tables with no 'Table N' caption "
+                "and no lines; may produce false positives)",
                 value=False,
             )
-            btn_procesar = gr.Button("Extraer Tablas", variant="primary")
+            extract_btn = gr.Button("Extract tables", variant="primary")
 
-    estado = gr.Textbox(label="Estado del proceso", interactive=False)
+    status = gr.Textbox(label="Status", interactive=False)
 
     with gr.Row():
-        btn_prev = gr.Button("◀ Anterior", interactive=False)
+        prev_btn = gr.Button("◀ Previous", interactive=False)
         info = gr.Markdown("")
-        btn_next = gr.Button("Siguiente ▶", interactive=False)
+        next_btn = gr.Button("Next ▶", interactive=False)
 
-    preview = gr.Dataframe(label="Preview de la tabla", interactive=False, wrap=True)
+    preview = gr.Dataframe(label="Table preview", interactive=False, wrap=True)
 
     with gr.Row():
-        dl_csv = gr.DownloadButton("⬇ Descargar CSV", interactive=False)
-        dl_xlsx = gr.DownloadButton("⬇ Descargar Excel", interactive=False)
+        csv_btn = gr.DownloadButton("⬇ Download CSV", interactive=False)
+        xlsx_btn = gr.DownloadButton("⬇ Download Excel", interactive=False)
 
     with gr.Group():
-        gr.Markdown("#### 🗄️ Guardar en base de datos SQL (SQLite)")
-        ruta_db = gr.Textbox(label="Archivo de base de datos", value=DB_PATH)
+        gr.Markdown("#### 🗄️ Save to a SQL database (SQLite)")
+        db_path_box = gr.Textbox(label="Database file", value=DB_PATH)
         with gr.Row():
-            btn_db_una = gr.Button("💾 Guardar esta tabla")
-            btn_db_todas = gr.Button("💾 Guardar todas las tablas")
-        estado_db = gr.Textbox(label="Estado de la base de datos", interactive=False)
+            save_one_btn = gr.Button("💾 Save this table")
+            save_all_btn = gr.Button("💾 Save all tables")
+        db_status = gr.Textbox(label="Database status", interactive=False)
 
-    with gr.Accordion("Ver como JSON (lista de diccionarios)", open=False):
-        out_json = gr.Code(language="json", lines=12, label="JSON de la tabla actual")
+    with gr.Accordion("View as JSON (list of dictionaries)", open=False):
+        json_out = gr.Code(language="json", lines=12, label="Current table as JSON")
 
-    # Orden de las salidas de mostrar()
-    vista = [idx_state, info, preview, out_json, dl_csv, dl_xlsx, btn_prev, btn_next]
+    # Output order of show_table()
+    view = [idx_state, info, preview, json_out, csv_btn, xlsx_btn, prev_btn, next_btn]
 
-    btn_procesar.click(
-        fn=procesar,
-        inputs=[input_pdf, chk_permisivo],
-        outputs=[estado, tablas_state] + vista,
+    extract_btn.click(
+        fn=process,
+        inputs=[pdf_input, extended_chk],
+        outputs=[status, tables_state] + view,
     )
-    btn_prev.click(
-        fn=lambda t, i: mover(t, i, -1),
-        inputs=[tablas_state, idx_state],
-        outputs=vista,
+    prev_btn.click(
+        fn=lambda t, i: move(t, i, -1),
+        inputs=[tables_state, idx_state],
+        outputs=view,
     )
-    btn_next.click(
-        fn=lambda t, i: mover(t, i, +1),
-        inputs=[tablas_state, idx_state],
-        outputs=vista,
+    next_btn.click(
+        fn=lambda t, i: move(t, i, +1),
+        inputs=[tables_state, idx_state],
+        outputs=view,
     )
-    btn_db_una.click(
-        fn=guardar_actual,
-        inputs=[tablas_state, idx_state, ruta_db],
-        outputs=estado_db,
+    save_one_btn.click(
+        fn=save_current,
+        inputs=[tables_state, idx_state, db_path_box],
+        outputs=db_status,
     )
-    btn_db_todas.click(
-        fn=guardar_todas,
-        inputs=[tablas_state, ruta_db],
-        outputs=estado_db,
+    save_all_btn.click(
+        fn=save_all,
+        inputs=[tables_state, db_path_box],
+        outputs=db_status,
     )
 
 if __name__ == "__main__":
-    interfaz.launch()
+    demo.launch()
