@@ -18,6 +18,10 @@ MAX_CAPTION_DISTANCE = 200   # max pt between a "Table N" caption and its table
 MIN_COLUMN_GAP = 6       # pt of vertical white space that separates two table columns
 RIVER_TOLERANCE = 0.15   # share of rows allowed to "cross" a gap (merged headers)
 ROW_TOLERANCE = 3        # pt of vertical difference for words to count as the same row
+# Many publisher PDFs have no real space characters: words are separated only by position.
+# The gap that splits two words is proportional to the font size (0.15 em).
+WORD_X_TOLERANCE_RATIO = 0.15
+MIN_VERTICAL_RULES = 3   # a real grid needs at least 3 vertical lines (2 columns)
 
 # --- Database -------------------------------------------------------------
 DB_PATH = "paper_tables.db"
@@ -32,12 +36,14 @@ CROP_TEXT_SETTINGS = {
     "join_tolerance": 3,
     "min_words_vertical": 2,
     "min_words_horizontal": 1,
+    "text_x_tolerance": 1.5,  # publisher PDFs often have no real space characters
 }
 
 FREE_TEXT_SETTINGS = {
     "vertical_strategy": "text",
     "horizontal_strategy": "text",
     "snap_tolerance": 4,
+    "text_x_tolerance": 1.5,
 }
 
 # --- Captions -------------------------------------------------------------

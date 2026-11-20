@@ -1,5 +1,11 @@
 """Page geometry helpers: text segments, crops, ruling lines and captions."""
-from .config import MAX_CAPTION_DISTANCE, MIN_RULE_WIDTH_RATIO, SEGMENT_GAP
+from .config import (
+    MAX_CAPTION_DISTANCE,
+    MIN_RULE_WIDTH_RATIO,
+    MIN_VERTICAL_RULES,
+    SEGMENT_GAP,
+    WORD_X_TOLERANCE_RATIO,
+)
 
 
 def _segment(words):
@@ -16,7 +22,7 @@ def text_segments(page):
     """Group words by line and split each line wherever there is a large horizontal gap,
     so a caption in the right-hand column is not glued to the left column's text."""
     lines = {}
-    for w in page.extract_words():
+    for w in page.extract_words(x_tolerance_ratio=WORD_X_TOLERANCE_RATIO):
         lines.setdefault(round(w["top"] / 3), []).append(w)
 
     segments = []
@@ -43,15 +49,33 @@ def crop_page(page, bbox):
     return page.crop((x0, top, x1, bottom))
 
 
+def _merge_collinear(segments):
+    """Join thin segments that sit at the same height into one rule. Some publishers
+    draw each table rule as one short stroke per column."""
+    groups = {}
+    for o in segments:
+        groups.setdefault(round(o["top"]), []).append(o)
+    return [
+        {
+            "x0": min(o["x0"] for o in g), "x1": max(o["x1"] for o in g),
+            "top": min(o["top"] for o in g), "bottom": max(o["bottom"] for o in g),
+        }
+        for g in groups.values()
+    ]
+
+
 def horizontal_rules(region, page_width):
     """Wide horizontal lines (typical of 'booktabs' tables: top, under the header, bottom).
     Returns those with the same width as the first one."""
-    rules = []
-    for o in list(region.lines) + list(region.rects):
-        height = abs(o["bottom"] - o["top"])
-        width = o["x1"] - o["x0"]
-        if height <= 2.5 and width >= MIN_RULE_WIDTH_RATIO * page_width:
-            rules.append(o)
+    thin = []
+    # publishers such as Nature draw table rules as thin filled paths (curves)
+    for o in list(region.lines) + list(region.rects) + list(region.curves):
+        if abs(o["bottom"] - o["top"]) <= 2.5:
+            thin.append(o)
+    rules = [
+        r for r in _merge_collinear(thin)
+        if r["x1"] - r["x0"] >= MIN_RULE_WIDTH_RATIO * page_width
+    ]
     if not rules:
         return []
     rules.sort(key=lambda o: o["top"])
@@ -67,6 +91,23 @@ def horizontal_rules(region, page_width):
             break
         result.append(r)
     return result
+
+
+def has_vertical_rules(page, bbox):
+    """True if the area has real vertical ruling lines (a true grid). Tables drawn with
+    horizontal rules only (booktabs style) have none: their columns are rebuilt from the
+    white space between words instead."""
+    x0, top, x1, bottom = bbox
+    height = bottom - top
+    xs = {
+        round(e["x0"])
+        for e in page.edges
+        if e["orientation"] == "v"
+        and e["x0"] >= x0 - 2 and e["x1"] <= x1 + 2
+        and e["top"] >= top - 2 and e["bottom"] <= bottom + 2
+        and e["height"] >= 0.5 * height
+    }
+    return len(xs) >= MIN_VERTICAL_RULES
 
 
 def caption_above(bbox, captions):

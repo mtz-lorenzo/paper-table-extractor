@@ -24,6 +24,11 @@ def is_numeric(cell):
     return digits / len(compact) >= 0.5
 
 
+def has_alphanumeric(cell):
+    """True if the cell contains at least one letter or digit (not just symbols like '*')."""
+    return any(ch.isalnum() for ch in cell)
+
+
 def count_words(cell):
     """Approximate word count. Space-separated text is split on whitespace; for
     Chinese/Japanese (no spaces) every two characters count as one word."""

@@ -1,7 +1,7 @@
 """Heuristics that decide whether a matrix is a real table or running text."""
 from .config import MIN_COLS, MIN_FILL_RATIO, MIN_ROWS
 from .headers import count_header_rows
-from .text_utils import count_words, is_numeric, visual_length
+from .text_utils import count_words, has_alphanumeric, is_numeric, visual_length
 
 
 def is_prose_row(row):
@@ -53,6 +53,10 @@ def looks_like_table(matrix, source):
     if not filled or len(filled) / len(cells) < MIN_FILL_RATIO:
         return False
 
+    # Heatmaps and figure grids: cells holding only symbols such as '*'
+    if sum(not has_alphanumeric(c) for c in filled) / len(filled) > 0.5:
+        return False
+
     numeric_ratio = sum(is_numeric(c) for c in filled) / len(filled)
     long_ratio = sum(count_words(c) >= 6 for c in filled) / len(filled)
     text_cells = [c for c in filled if not is_numeric(c)]
@@ -67,5 +71,9 @@ def looks_like_table(matrix, source):
         return False
 
     if source == "free":
+        # weak evidence: also reject cells that are long in characters (reference lists, text)
+        very_long = sum(visual_length(c) >= 40 for c in filled) / len(filled)
+        if very_long > 0.25:
+            return False
         return len(matrix[0]) >= 3 and len(matrix) >= 4 and numeric_ratio >= 0.35
     return True

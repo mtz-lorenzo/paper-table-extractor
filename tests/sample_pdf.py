@@ -184,3 +184,75 @@ def create_cjk_pdf(path):
         booktabs(c, font, 545, rows)
         c.showPage()
     c.save()
+
+
+def _draw_words(c, x, y, text, font="Helvetica", size=8):
+    """Draw text word by word with NO space characters, only a positional gap, as many
+    publisher PDFs do. The gap (0.25 em) is smaller than pdfplumber's default tolerance."""
+    c.setFont(font, size)
+    for word in text.split(" "):
+        c.drawString(x, y, word)
+        x += c.stringWidth(word, font, size) + 0.25 * size
+
+
+def _curve_rule(c, x0, x1, y, height=0.4):
+    """A thin filled path (a 'curve' for pdfplumber), like the rules in Nature tables."""
+    p = c.beginPath()
+    p.moveTo(x0, y)
+    p.lineTo(x1, y)
+    p.lineTo(x1, y + height)
+    p.curveTo(x1, y + height, x0, y + height, x0, y + height)
+    p.close()
+    c.drawPath(p, stroke=0, fill=1)
+
+
+def create_publisher_style_pdf(path):
+    """One page that mimics a publisher PDF: positional word spacing, a table whose rules
+    are drawn as curves (one stroke per column) and, below it, two figure grids without a
+    'Table N' caption (a symbol heatmap and a 2-column mini table) that must be ignored."""
+    c = canvas.Canvas(path, pagesize=A4)
+    _text_columns(c, HEIGHT - 60, 520)
+
+    edges = [50, 210, 350, 455, 545]  # one stroke per column
+    xs = [50, 215, 355, 460]
+
+    def rule(y):
+        for a, b in zip(edges, edges[1:]):
+            _curve_rule(c, a, b, y)
+
+    rule(500)
+    _draw_words(c, 50, 485, "Table 1 | Notable disease-cell type associations", "Helvetica-Bold", 8)
+    rule(473)
+    rows = [
+        ["Disease/trait", "Cell type", "Data source", "Effect size (SE)"],
+        ["Insomnia", "Photoreceptor cells", "Fetal brain scATAC", "0.81 (0.23)"],
+        ["Bipolar disorder", "Parvalbumin interneurons", "Adult brain scATAC", "1.23 (0.28)"],
+        ["Intelligence", "Corticofugal projection neurons", "Adult brain scRNA", "0.76 (0.14)"],
+        ["Reaction time", "Ganglion cells", "Fetal brain scRNA", "0.45 (0.14)"],
+    ]
+    y = 460
+    for i, row in enumerate(rows):
+        for x, text in zip(xs, row):
+            _draw_words(c, x, y, text)
+        if i == 0:
+            rule(y - 6)
+            y -= 6
+        y -= 13
+    rule(y - 2)
+
+    # Figure grids WITHOUT a table caption (must not be extracted)
+    heat = [["*" if (i * 3 + j) % 4 == 0 else "" for j in range(8)] for i in range(8)]
+    t = Table(heat, colWidths=[18] * 8, rowHeights=[12] * 8)
+    t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                           ("FONT", (0, 0), (-1, -1), "Helvetica", 8)]))
+    _, h = t.wrapOn(c, 200, 200)
+    t.drawOn(c, 60, 260 - h + 60)
+
+    mini = Table([["Gene 1", "0.02"], ["...", "..."], ["Gene 20k", "0.005"]], colWidths=[70, 50])
+    mini.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                              ("FONT", (0, 0), (-1, -1), "Helvetica", 8)]))
+    _, h = mini.wrapOn(c, 200, 100)
+    mini.drawOn(c, 300, 200)
+
+    c.showPage()
+    c.save()

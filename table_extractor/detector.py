@@ -12,10 +12,12 @@ from .config import (
     FREE_TEXT_SETTINGS,
     GRID_SETTINGS,
     MAX_CAPTION_DISTANCE,
+    WORD_X_TOLERANCE_RATIO,
 )
 from .geometry import (
     caption_above,
     crop_page,
+    has_vertical_rules,
     horizontal_rules,
     inside_bbox,
     text_segments,
@@ -32,15 +34,22 @@ def clean_matrix(table):
 
 
 def _grid_tables(page, captions):
-    """Tables with drawn ruling lines (strong evidence)."""
+    """Tables with a real drawn grid (vertical and horizontal lines).
+    Without a "Table N" caption the evidence is weaker (it could be a figure, e.g. a
+    heatmap), so the stricter 'free' criteria apply."""
     found = []
     try:
         for t in page.find_tables(GRID_SETTINGS):
-            matrix = tidy_matrix(clean_matrix(t.extract()))
-            if looks_like_table(matrix, "grid"):
+            if not has_vertical_rules(page, t.bbox):
+                continue  # horizontal rules only: handled through the caption path
+            matrix = tidy_matrix(clean_matrix(
+                t.extract(x_tolerance_ratio=WORD_X_TOLERANCE_RATIO)
+            ))
+            caption = caption_above(t.bbox, captions)
+            if looks_like_table(matrix, "grid" if caption else "free"):
                 found.append({
                     "bbox": t.bbox, "matrix": matrix, "source": "grid",
-                    "caption": caption_above(t.bbox, captions),
+                    "caption": caption,
                 })
     except Exception:
         logger.warning("Grid detection failed on page %s", page.page_number, exc_info=True)
@@ -86,6 +95,9 @@ def _table_below_caption(page, caption, delimiters):
         matrix = clean_matrix(table)
 
     matrix = tidy_matrix(matrix)
+    # the caption line can sit between the top rule and the header: drop it
+    while matrix and matrix[0][0] and ANY_CAPTION_RE.match(matrix[0][0]) and not any(matrix[0][1:]):
+        matrix.pop(0)
     if looks_like_table(matrix, "caption"):
         return {"bbox": bbox, "matrix": matrix, "source": "caption", "caption": caption["text"]}
     return None

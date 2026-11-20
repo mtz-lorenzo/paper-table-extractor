@@ -6,7 +6,7 @@ columns are defined by empty vertical gaps between words and each word is assign
 """
 import math
 
-from .config import MIN_COLUMN_GAP, RIVER_TOLERANCE, ROW_TOLERANCE
+from .config import MIN_COLUMN_GAP, RIVER_TOLERANCE, ROW_TOLERANCE, WORD_X_TOLERANCE_RATIO
 
 
 def group_lines(words):
@@ -64,7 +64,7 @@ def matrix_from_words(region):
     """Matrix (list of lists of str) for the region, or None if no columns are visible.
     Each word goes whole into one column, and a title spanning several columns is kept
     complete in the first one, leaving the others empty (merged cell)."""
-    words = region.extract_words()
+    words = region.extract_words(x_tolerance_ratio=WORD_X_TOLERANCE_RATIO)
     if not words:
         return None
     lines = group_lines(words)

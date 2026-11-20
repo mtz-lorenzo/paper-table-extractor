@@ -1,4 +1,4 @@
 gradio>=4.30
-pdfplumber>=0.10
+pdfplumber>=0.11
 pandas>=2.0
 openpyxl>=3.1
