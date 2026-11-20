@@ -4,8 +4,7 @@ A web app that extracts tables from scientific papers in PDF format, shows them 
 with a preview, lets you download each one individually (CSV / Excel) and save them to a SQL
 database (SQLite).
 
-<!-- Add a screenshot of the interface: save it as docs/screenshot.png and uncomment the line below -->
-<!-- ![Interface](docs/screenshot.png) -->
+![Interface](docs/screenshot.png)
 
 ## Features
 
